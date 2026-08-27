@@ -1,4 +1,4 @@
-# Collateral Lite 📌
+# Notificador Lite 📌
 
 Una aplicación nativa para Android diseñada para mantener **notificaciones fijas en la barra de estado**. Inspirada en la app original Collateral, te permite priorizar pendientes y recordatorios sin que se borren por accidente.
 
@@ -23,3 +23,20 @@ Una aplicación nativa para Android diseñada para mantener **notificaciones fij
 ---
 
 ### Estructura rápida
+├── receivers/
+│   └── BootReceiver.kt       // Recupera las notas al encender el teléfono
+├── ui/
+│   └── MainActivity.kt       // Formulario simple en Compose
+└── utils/
+└── NotificationHelper.kt // Creación y control de canales
+
+### Cómo probarlo
+
+1. Clona el repo:
+   ```bash
+   git clone [https://github.com/tu-usuario/collateral-lite.git](https://github.com/tu-usuario/collateral-lite.git)
+
+Como Instalar:
+
+1. Abre el proyecto en Android Studio.
+2. Conecta tu teléfono y dale a Run.
