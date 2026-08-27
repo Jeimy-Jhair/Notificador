@@ -23,12 +23,12 @@ Una aplicación nativa para Android diseñada para mantener **notificaciones fij
 ---
 
 ### Estructura rápida
-├── receivers/
-│   └── BootReceiver.kt       // Recupera las notas al encender el teléfono
-├── ui/
-│   └── MainActivity.kt       // Formulario simple en Compose
-└── utils/
-└── NotificationHelper.kt // Creación y control de canales
+├── receivers/  
+│   └── BootReceiver.kt       // Recupera las notas al encender el teléfono   
+├── ui/  
+│   └── MainActivity.kt       // Formulario simple en Compose  
+└── utils/  
+└── NotificationHelper.kt // Creación y control de canales  
 
 ### Cómo probarlo
 
