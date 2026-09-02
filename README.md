@@ -34,7 +34,7 @@ Una aplicación nativa para Android diseñada para mantener **notificaciones fij
 
 1. Clona el repo:
    ```bash
-   git clone [https://github.com/tu-usuario/collateral-lite.git](https://github.com/tu-usuario/collateral-lite.git)
+   git clone https://github.com/Jeimy-Jhair/Notificador
 
 Como Instalar:
 
