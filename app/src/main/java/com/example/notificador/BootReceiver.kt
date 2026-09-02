@@ -32,8 +32,9 @@ class BootReceiver : BroadcastReceiver() {
             val title = obj.getString("title")
             val desc = obj.getString("desc")
             val priority = obj.getString("priority")
+            val date = if (obj.has("date")) obj.getString("date") else ""
             
-            NotificationHelper.showNotification(context, id, title, desc, priority)
+            NotificationHelper.showNotification(context, id, title, desc, priority, date)
         }
     }
 
