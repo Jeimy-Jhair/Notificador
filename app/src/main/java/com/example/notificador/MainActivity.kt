@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -29,13 +30,23 @@ import com.example.notificador.ui.theme.NotificadorTheme
 import org.json.JSONArray
 import org.json.JSONObject
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import java.text.SimpleDateFormat
+import java.util.*
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNotificationChannels(this)
         setContent {
             NotificadorTheme {
-                MainScreen()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen()
+                }
             }
         }
     }
@@ -47,7 +58,7 @@ object NotificationHelper {
     const val CHANNEL_MEDIUM = "medium_priority"
     const val CHANNEL_LOW = "low_priority"
 
-    fun showNotification(context: Context, id: Int, title: String, desc: String, priority: String) {
+    fun showNotification(context: Context, id: Int, title: String, desc: String, priority: String, date: String) {
         val channelId = when (priority) {
             "Alta" -> CHANNEL_HIGH
             "Media" -> CHANNEL_MEDIUM
@@ -60,6 +71,8 @@ object NotificationHelper {
             else -> NotificationCompat.PRIORITY_LOW
         }
 
+        val contentText = if (date.isNotEmpty()) "[$date] $desc" else desc
+
         // Action to Unpin (via BroadcastReceiver)
         val unpinIntent = Intent(context, BootReceiver::class.java).apply {
             action = "com.example.notificador.ACTION_UNPIN"
@@ -70,13 +83,14 @@ object NotificationHelper {
         )
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.notification_log_svgrepo_com)
             .setContentTitle(title)
-            .setContentText(desc)
+            .setContentText(contentText)
             .setPriority(importance)
             .setOngoing(true)
             .setAutoCancel(false)
             .addAction(android.R.drawable.ic_menu_delete, "Desfijar", unpinPendingIntent)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .build()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -97,14 +111,36 @@ fun createNotificationChannels(context: Context) {
     }
 }
 
+@Preview(showBackground = true)
+@Composable
+fun MainScreenPreview() {
+    NotificadorTheme {
+        MainScreen()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("") }
     val priorities = listOf("Alta", "Media", "Baja")
     var selectedPriority by remember { mutableStateOf(priorities[1]) }
+
+    val calendar = Calendar.getInstance()
+    val datePickerDialog = android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            calendar.set(year, month, dayOfMonth)
+            date = sdf.format(calendar.time)
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH)
+    )
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -124,31 +160,64 @@ fun MainScreen() {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Notificador 📌") })
+            CenterAlignedTopAppBar(
+                title = { Text("Notificador 📌", style = MaterialTheme.typography.headlineMedium) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Título de la nota") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = desc,
-                onValueChange = { desc = it },
-                label = { Text("Descripción (opcional)") },
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Título de la nota") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = desc,
+                        onValueChange = { desc = it },
+                        label = { Text("Descripción (opcional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it },
+                        label = { Text("Fecha") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        trailingIcon = {
+                            IconButton(onClick = { datePickerDialog.show() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.DateRange,
+                                    contentDescription = "Seleccionar fecha"
+                                )
+                            }
+                        }
+                    )
+                }
+            }
 
             Text("Prioridad", style = MaterialTheme.typography.titleMedium)
             
@@ -160,9 +229,9 @@ fun MainScreen() {
             ) {
                 priorities.forEach { priority ->
                     val color = when (priority) {
-                        "Alta" -> Color.Red
-                        "Media" -> Color.Yellow
-                        else -> Color.Cyan
+                        "Alta" -> Color(0xFFE57373)
+                        "Media" -> Color(0xFFFFD54F)
+                        else -> Color(0xFF81C784)
                     }
                     
                     FilterChip(
@@ -170,7 +239,7 @@ fun MainScreen() {
                         onClick = { selectedPriority = priority },
                         label = { Text(priority) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = color.copy(alpha = 0.3f),
+                            selectedContainerColor = color,
                             selectedLabelColor = Color.Black
                         )
                     )
@@ -183,25 +252,28 @@ fun MainScreen() {
                 onClick = {
                     if (title.isNotBlank()) {
                         val id = System.currentTimeMillis().toInt()
-                        saveNotification(context, id, title, desc, selectedPriority)
-                        NotificationHelper.showNotification(context, id, title, desc, selectedPriority)
+                        saveNotification(context, id, title, desc, selectedPriority, date)
+                        NotificationHelper.showNotification(context, id, title, desc, selectedPriority, date)
                         title = ""
                         desc = ""
+                        date = ""
                         Toast.makeText(context, "Notificación fijada", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, "El título es obligatorio", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.large
             ) {
-                Text("Fijar Notificación")
+                Text("Fijar Notificación", style = MaterialTheme.typography.titleMedium)
             }
         }
     }
 }
 
-fun saveNotification(context: Context, id: Int, title: String, desc: String, priority: String) {
+fun saveNotification(context: Context, id: Int, title: String, desc: String, priority: String, date: String) {
     val prefs = context.getSharedPreferences("notificador_prefs", Context.MODE_PRIVATE)
     val notificationsJson = prefs.getString("notifications", "[]") ?: "[]"
     val array = JSONArray(notificationsJson)
@@ -211,6 +283,7 @@ fun saveNotification(context: Context, id: Int, title: String, desc: String, pri
         put("title", title)
         put("desc", desc)
         put("priority", priority)
+        put("date", date)
     }
     array.put(obj)
     prefs.edit().putString("notifications", array.toString()).apply()
