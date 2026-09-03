@@ -29,6 +29,9 @@ import androidx.core.content.ContextCompat
 import com.example.notificador.ui.theme.NotificadorTheme
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardCapitalization
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -71,7 +74,36 @@ object NotificationHelper {
             else -> NotificationCompat.PRIORITY_LOW
         }
 
-        val contentText = if (date.isNotEmpty()) "[$date] $desc" else desc
+        // 1. Formateamos la fecha si no está vacía
+        val fechaFormateada = if (date.isNotEmpty()) {
+            try {
+                // Formato con el que entra la fecha desde el DatePickerDialog ("dd/MM/yyyy")
+                val inputFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                val fechaDate = inputFormat.parse(date)
+
+                // Formato deseado: "día, numero de mes de año" en español (ej: "miércoles, 02 de septiembre de 2026")
+                val spanishLocale = Locale("es", "ES")
+                val outputFormat = SimpleDateFormat("EEEE, dd 'de' MMMM 'de' yyyy", spanishLocale)
+
+                val stringFecha = fechaDate?.let { outputFormat.format(it) } ?: date
+
+                // Capitalizar la primera letra del día de la semana
+                stringFecha.replaceFirstChar { if (it.isLowerCase()) it.titlecase(spanishLocale) else it.toString() }
+            } catch (e: Exception) {
+                date // Si ocurre un error al parsear, usa la fecha original
+            }
+        } else ""
+
+        // 2. Construimos el texto concatenando fecha (si existe) y la descripción en la siguiente línea (\n)
+        val contentText = buildString {
+            if (fechaFormateada.isNotEmpty()) {
+                append(fechaFormateada)
+                if (desc.isNotEmpty()) append("\n")
+            }
+            if (desc.isNotEmpty()) {
+                append(desc)
+            }
+        }
 
         // Action to Unpin (via BroadcastReceiver)
         val unpinIntent = Intent(context, BootReceiver::class.java).apply {
@@ -90,6 +122,7 @@ object NotificationHelper {
             .setOngoing(true)
             .setAutoCancel(false)
             .addAction(android.R.drawable.ic_menu_delete, "Desfijar", unpinPendingIntent)
+            // Importante: BigTextStyle permite mostrar múltiples líneas al desplegar la notificación
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .build()
 
@@ -161,7 +194,7 @@ fun MainScreen() {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Notificador 📌", style = MaterialTheme.typography.headlineMedium) },
+                title = { Text("Notificador", style = MaterialTheme.typography.headlineMedium) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -189,6 +222,9 @@ fun MainScreen() {
                         value = title,
                         onValueChange = { title = it },
                         label = { Text("Título de la nota") },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences // Mayúscula en la primera letra de cada frase
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -198,6 +234,7 @@ fun MainScreen() {
                         onValueChange = { desc = it },
                         label = { Text("Descripción (opcional)") },
                         modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         minLines = 3
                     )
 
