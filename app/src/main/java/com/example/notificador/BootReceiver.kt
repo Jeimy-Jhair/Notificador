@@ -33,15 +33,28 @@ class BootReceiver : BroadcastReceiver() {
             val desc = obj.getString("desc")
             val priority = obj.getString("priority")
             val date = if (obj.has("date")) obj.getString("date") else ""
+            val time = if (obj.has("time")) obj.getString("time") else ""
+            val hasAlarm = if (obj.has("hasAlarm")) obj.getBoolean("hasAlarm") else false
+            val alarmMinutesBefore = if (obj.has("alarmMinutesBefore")) obj.getInt("alarmMinutesBefore") else 0
             
-            NotificationHelper.showNotification(context, id, title, desc, priority, date)
+            NotificationHelper.showNotification(context, id, title, desc, priority, date, time, hasAlarm, alarmMinutesBefore)
+
+            // Reprogramar alarma si estaba activa
+            if (hasAlarm && date.isNotEmpty() && time.isNotEmpty()) {
+                AlarmHelper.scheduleAlarm(context, id, title, desc, date, time, alarmMinutesBefore)
+            }
         }
     }
 
     private fun unpinNotification(context: Context, id: Int) {
-        // Cancel notification
+        // Cancel notification fija
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(id)
+        // Cancel también la notificación de alarma si ya sonó (id+100000)
+        notificationManager.cancel(id + 100000)
+
+        // Cancelar alarma programada
+        AlarmHelper.cancelAlarm(context, id)
 
         // Remove from SharedPreferences
         val prefs = context.getSharedPreferences("notificador_prefs", Context.MODE_PRIVATE)
