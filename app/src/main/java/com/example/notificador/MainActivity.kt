@@ -1,6 +1,7 @@
 package com.example.notificador
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,13 +10,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +38,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardCapitalization
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.DateRange
 import java.text.SimpleDateFormat
 import java.util.*
@@ -61,7 +67,17 @@ object NotificationHelper {
     const val CHANNEL_MEDIUM = "medium_priority"
     const val CHANNEL_LOW = "low_priority"
 
-    fun showNotification(context: Context, id: Int, title: String, desc: String, priority: String, date: String) {
+    fun showNotification(
+        context: Context,
+        id: Int,
+        title: String,
+        desc: String,
+        priority: String,
+        date: String,
+        time: String = "",
+        hasAlarm: Boolean = false,
+        alarmMinutesBefore: Int = 0
+    ) {
         val channelId = when (priority) {
             "Alta" -> CHANNEL_HIGH
             "Media" -> CHANNEL_MEDIUM
@@ -77,31 +93,38 @@ object NotificationHelper {
         // 1. Formateamos la fecha si no está vacía
         val fechaFormateada = if (date.isNotEmpty()) {
             try {
-                // Formato con el que entra la fecha desde el DatePickerDialog ("dd/MM/yyyy")
                 val inputFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                 val fechaDate = inputFormat.parse(date)
-
-                // Formato deseado: "día, numero de mes de año" en español (ej: "miércoles, 02 de septiembre de 2026")
                 val spanishLocale = Locale("es", "ES")
                 val outputFormat = SimpleDateFormat("EEEE, dd 'de' MMMM 'de' yyyy", spanishLocale)
-
                 val stringFecha = fechaDate?.let { outputFormat.format(it) } ?: date
-
-                // Capitalizar la primera letra del día de la semana
                 stringFecha.replaceFirstChar { if (it.isLowerCase()) it.titlecase(spanishLocale) else it.toString() }
             } catch (e: Exception) {
-                date // Si ocurre un error al parsear, usa la fecha original
+                date
             }
         } else ""
 
-        // 2. Construimos el texto concatenando fecha (si existe) y la descripción en la siguiente línea (\n)
+        // 2. Formateamos hora si existe
+        val horaFormateada = if (time.isNotEmpty()) "Hora: $time" else ""
+
+        // 3. Construimos el texto: fecha + hora + descripción
         val contentText = buildString {
             if (fechaFormateada.isNotEmpty()) {
                 append(fechaFormateada)
+                if (horaFormateada.isNotEmpty() || desc.isNotEmpty()) append("\n")
+            }
+            if (horaFormateada.isNotEmpty()) {
+                append(horaFormateada)
                 if (desc.isNotEmpty()) append("\n")
             }
             if (desc.isNotEmpty()) {
                 append(desc)
+            }
+            // Info de alarma opcional en la notificación fija
+            if (hasAlarm && time.isNotEmpty() && date.isNotEmpty()) {
+                val alarmInfo = if (alarmMinutesBefore == 0) "🔔 Alarma a la hora" else "🔔 Alarma $alarmMinutesBefore min antes"
+                if (isNotEmpty()) append("\n")
+                append(alarmInfo)
             }
         }
 
@@ -117,13 +140,12 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.notification_log_svgrepo_com)
             .setContentTitle(title)
-            .setContentText(contentText)
+            .setContentText(if (contentText.isEmpty()) title else contentText.take(50))
             .setPriority(importance)
             .setOngoing(true)
             .setAutoCancel(false)
             .addAction(android.R.drawable.ic_menu_delete, "Desfijar", unpinPendingIntent)
-            // Importante: BigTextStyle permite mostrar múltiples líneas al desplegar la notificación
-            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText.ifEmpty { title }))
             .build()
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -159,6 +181,9 @@ fun MainScreen() {
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf("") }
+    var hasAlarm by remember { mutableStateOf(false) }
+    var alarmMinutesBefore by remember { mutableIntStateOf(10) }
     val priorities = listOf("Alta", "Media", "Baja")
     var selectedPriority by remember { mutableStateOf(priorities[1]) }
 
@@ -173,6 +198,17 @@ fun MainScreen() {
         calendar.get(Calendar.YEAR),
         calendar.get(Calendar.MONTH),
         calendar.get(Calendar.DAY_OF_MONTH)
+    )
+
+    val timePickerDialog = android.app.TimePickerDialog(
+        context,
+        { _, hourOfDay, minute ->
+            // Formato 24h HH:mm para almacenamiento, pero mostramos HH:mm
+            time = String.format(Locale.getDefault(), "%02d:%02d", hourOfDay, minute)
+        },
+        calendar.get(Calendar.HOUR_OF_DAY),
+        calendar.get(Calendar.MINUTE),
+        true // 24h format
     )
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -206,8 +242,9 @@ fun MainScreen() {
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ElevatedCard(
@@ -223,7 +260,7 @@ fun MainScreen() {
                         onValueChange = { title = it },
                         label = { Text("Título de la nota") },
                         keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences // Mayúscula en la primera letra de cada frase
+                            capitalization = KeyboardCapitalization.Sentences
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -242,6 +279,7 @@ fun MainScreen() {
                         value = date,
                         onValueChange = { date = it },
                         label = { Text("Fecha") },
+                        placeholder = { Text("dd/MM/yyyy") },
                         modifier = Modifier.fillMaxWidth(),
                         readOnly = true,
                         trailingIcon = {
@@ -253,6 +291,153 @@ fun MainScreen() {
                             }
                         }
                     )
+
+                    // Campo Hora (NUEVO)
+                    OutlinedTextField(
+                        value = time,
+                        onValueChange = { time = it },
+                        label = { Text("Hora (opcional)") },
+                        placeholder = { Text("HH:mm") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        trailingIcon = {
+                            Row {
+                                if (time.isNotEmpty()) {
+                                    IconButton(onClick = { time = ""; hasAlarm = false }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.DateRange,
+                                            contentDescription = "Limpiar hora"
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { timePickerDialog.show() }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AccessTime,
+                                        contentDescription = "Seleccionar hora"
+                                    )
+                                }
+                            }
+                        }
+                    )
+
+                    // Switch y opciones de alarma (NUEVO - opcional, se puede quitar)
+                    if (time.isNotEmpty() && date.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(
+                                    imageVector = Icons.Filled.Alarm,
+                                    contentDescription = null,
+                                    tint = if (hasAlarm) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Column {
+                                    Text("Recordatorio con alarma", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "Sonará como alarma",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = hasAlarm,
+                                onCheckedChange = { hasAlarm = it }
+                            )
+                        }
+
+                        if (hasAlarm) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "¿Cuánto antes quieres que suene?",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            
+                            // Selector de minutos antes
+                            val minuteOptions = listOf(0, 5, 10, 15, 30, 60)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                // Primera fila: 0, 5, 10
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    minuteOptions.take(3).forEach { mins ->
+                                        val label = if (mins == 0) "A la hora" else "${mins} min antes"
+                                        FilterChip(
+                                            selected = alarmMinutesBefore == mins,
+                                            onClick = { alarmMinutesBefore = mins },
+                                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        )
+                                    }
+                                }
+                                // Segunda fila: 15, 30, 60
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    minuteOptions.drop(3).forEach { mins ->
+                                        val label = "${mins} min antes"
+                                        FilterChip(
+                                            selected = alarmMinutesBefore == mins,
+                                            onClick = { alarmMinutesBefore = mins },
+                                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Preview del horario de alarma
+                            val alarmPreview = remember(time, date, alarmMinutesBefore) {
+                                AlarmHelper.getTriggerTimeFormatted(date, time, alarmMinutesBefore)
+                            }
+                            if (alarmPreview.isNotEmpty()) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Alarm,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            "Alarma sonará: $alarmPreview",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else if (time.isNotEmpty() || date.isNotEmpty()) {
+                        // Hint si solo uno está completo
+                        Text(
+                            "Completa fecha y hora para activar alarma",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -283,21 +468,54 @@ fun MainScreen() {
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Button(
                 onClick = {
-                    if (title.isNotBlank()) {
-                        val id = System.currentTimeMillis().toInt()
-                        saveNotification(context, id, title, desc, selectedPriority, date)
-                        NotificationHelper.showNotification(context, id, title, desc, selectedPriority, date)
-                        title = ""
-                        desc = ""
-                        date = ""
-                        Toast.makeText(context, "Notificación fijada", Toast.LENGTH_SHORT).show()
-                    } else {
+                    if (title.isBlank()) {
                         Toast.makeText(context, "El título es obligatorio", Toast.LENGTH_SHORT).show()
+                        return@Button
                     }
+                    // Validar que si quiere alarma, tenga fecha y hora
+                    if (hasAlarm && (date.isEmpty() || time.isEmpty())) {
+                        Toast.makeText(context, "Para la alarma necesitas fecha y hora", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+                    val id = System.currentTimeMillis().toInt()
+                    saveNotification(context, id, title, desc, selectedPriority, date, time, hasAlarm, alarmMinutesBefore)
+                    NotificationHelper.showNotification(context, id, title, desc, selectedPriority, date, time, hasAlarm, alarmMinutesBefore)
+
+                    // Programar alarma si está activada
+                    if (hasAlarm) {
+                        // Verificar permiso de alarmas exactas en Android 12+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                            if (!alarmManager.canScheduleExactAlarms()) {
+                                Toast.makeText(context, "Concede permiso de alarmas en Ajustes para que suene", Toast.LENGTH_LONG).show()
+                                try {
+                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) { }
+                            }
+                        }
+                        val scheduled = AlarmHelper.scheduleAlarm(context, id, title, desc, date, time, alarmMinutesBefore)
+                        if (scheduled) {
+                            val trigger = AlarmHelper.getTriggerTimeFormatted(date, time, alarmMinutesBefore)
+                            Toast.makeText(context, "Notificación fijada - Alarma: $trigger", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Notificación fijada (alarma no programada: hora ya pasó)", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "Notificación fijada", Toast.LENGTH_SHORT).show()
+                    }
+
+                    title = ""
+                    desc = ""
+                    date = ""
+                    time = ""
+                    hasAlarm = false
+                    alarmMinutesBefore = 10
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -306,11 +524,24 @@ fun MainScreen() {
             ) {
                 Text("Fijar Notificación", style = MaterialTheme.typography.titleMedium)
             }
+
+            // Espacio extra para scroll
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
-fun saveNotification(context: Context, id: Int, title: String, desc: String, priority: String, date: String) {
+fun saveNotification(
+    context: Context,
+    id: Int,
+    title: String,
+    desc: String,
+    priority: String,
+    date: String,
+    time: String = "",
+    hasAlarm: Boolean = false,
+    alarmMinutesBefore: Int = 0
+) {
     val prefs = context.getSharedPreferences("notificador_prefs", Context.MODE_PRIVATE)
     val notificationsJson = prefs.getString("notifications", "[]") ?: "[]"
     val array = JSONArray(notificationsJson)
@@ -321,6 +552,9 @@ fun saveNotification(context: Context, id: Int, title: String, desc: String, pri
         put("desc", desc)
         put("priority", priority)
         put("date", date)
+        put("time", time)
+        put("hasAlarm", hasAlarm)
+        put("alarmMinutesBefore", alarmMinutesBefore)
     }
     array.put(obj)
     prefs.edit().putString("notifications", array.toString()).apply()
