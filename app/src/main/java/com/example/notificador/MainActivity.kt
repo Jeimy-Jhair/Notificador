@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,12 +30,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.notificador.ui.theme.NotificadorTheme
+import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardCapitalization
-
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Alarm
@@ -95,11 +94,11 @@ object NotificationHelper {
             try {
                 val inputFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                 val fechaDate = inputFormat.parse(date)
-                val spanishLocale = Locale("es", "ES")
+                val spanishLocale = Locale.forLanguageTag("es-ES")
                 val outputFormat = SimpleDateFormat("EEEE, dd 'de' MMMM 'de' yyyy", spanishLocale)
                 val stringFecha = fechaDate?.let { outputFormat.format(it) } ?: date
                 stringFecha.replaceFirstChar { if (it.isLowerCase()) it.titlecase(spanishLocale) else it.toString() }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 date
             }
         } else ""
@@ -367,7 +366,7 @@ fun MainScreen() {
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     minuteOptions.take(3).forEach { mins ->
-                                        val label = if (mins == 0) "A la hora" else "${mins} min antes"
+                                        val label = if (mins == 0) "A la hora" else "$mins min antes"
                                         FilterChip(
                                             selected = alarmMinutesBefore == mins,
                                             onClick = { alarmMinutesBefore = mins },
@@ -386,7 +385,7 @@ fun MainScreen() {
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     minuteOptions.drop(3).forEach { mins ->
-                                        val label = "${mins} min antes"
+                                        val label = "$mins min antes"
                                         FilterChip(
                                             selected = alarmMinutesBefore == mins,
                                             onClick = { alarmMinutesBefore = mins },
@@ -553,5 +552,7 @@ fun saveNotification(
         put("alarmMinutesBefore", alarmMinutesBefore)
     }
     array.put(obj)
-    prefs.edit().putString("notifications", array.toString()).apply()
+    prefs.edit {
+        putString("notifications", array.toString())
+    }
 }

@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.edit
 import org.json.JSONArray
 
 class BootReceiver : BroadcastReceiver() {
@@ -68,6 +69,8 @@ class BootReceiver : BroadcastReceiver() {
                 newArray.put(obj)
             }
         }
-        prefs.edit().putString("notifications", newArray.toString()).apply()
+        prefs.edit {
+            putString("notifications", newArray.toString())
+        }
     }
 }
