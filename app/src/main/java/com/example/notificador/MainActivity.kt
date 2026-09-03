@@ -488,23 +488,19 @@ fun MainScreen() {
 
                     // Programar alarma si está activada
                     if (hasAlarm) {
-                        // Verificar permiso de alarmas exactas en Android 12+
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                            if (!alarmManager.canScheduleExactAlarms()) {
-                                Toast.makeText(context, "Concede permiso de alarmas en Ajustes para que suene", Toast.LENGTH_LONG).show()
-                                try {
-                                    val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                                    context.startActivity(intent)
-                                } catch (_: Exception) { }
-                            }
-                        }
                         val scheduled = AlarmHelper.scheduleAlarm(context, id, title, desc, date, time, alarmMinutesBefore)
                         if (scheduled) {
                             val trigger = AlarmHelper.getTriggerTimeFormatted(date, time, alarmMinutesBefore)
                             Toast.makeText(context, "Notificación fijada - Alarma: $trigger", Toast.LENGTH_LONG).show()
+                            // Si no tiene permiso de alarmas exactas, avisar pero la alarma igual quedó programada via setAlarmClock
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                                if (!alarmManager.canScheduleExactAlarms()) {
+                                    Toast.makeText(context, "Alarma programada (sin permiso exacto, usa modo compatible)", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         } else {
-                            Toast.makeText(context, "Notificación fijada (alarma no programada: hora ya pasó)", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Notificación fijada (alarma NO programada: hora ya pasó, elige una hora futura)", Toast.LENGTH_LONG).show()
                         }
                     } else {
                         Toast.makeText(context, "Notificación fijada", Toast.LENGTH_SHORT).show()
